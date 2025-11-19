@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Monthly Budget</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- PWA / Home Screen related -->
+  <meta name="theme-color" content="#2563eb" />
+  <link rel="manifest" href="manifest.webmanifest" />
+
+  <!-- iOS specific -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Budget" />
+  <!-- Optional icon (you can create icons/icon-192.png later) -->
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      margin: 0;
+      padding: 1rem;
+      background: #f5f5f5;
+    }
+    .app {
+      max-width: 800px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 1rem 1.5rem 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    }
+    h1, h2, h3 {
+      margin-top: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    label {
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+    input[type="number"], input[type="text"] {
+      width: 100%;
+      padding: 0.4rem 0.5rem;
+      margin-top: 0.25rem;
+      margin-bottom: 0.5rem;
+      box-sizing: border-box;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      font-size: 0.95rem;
+    }
+    .row {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .row > .col {
+      flex: 1 1 0;
+      min-width: 120px;
+    }
+    .row > .col-small {
+      flex: 0 0 80px;
+      min-width: 80px;
+    }
+    button {
+      border: none;
+      border-radius: 4px;
+      padding: 0.4rem 0.75rem;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: #2563eb;
+      color: white;
+    }
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #111827;
+    }
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+    }
+    th, td {
+      padding: 0.35rem 0.4rem;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+    }
+    th {
+      font-weight: 600;
+      background: #f9fafb;
+    }
+    .right {
+      text-align: right;
+      white-space: nowrap;
+    }
+    .center {
+      text-align: center;
+      white-space: nowrap;
+    }
+    .summary {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      border-radius: 6px;
+      background: #f9fafb;
+      font-size: 0.9rem;
+    }
+    .summary strong {
+      font-size: 1rem;
+    }
+    .muted {
+      color: #6b7280;
+      font-size: 0.85rem;
+    }
+    .tag {
+      display: inline-block;
+      padding: 0.1rem 0.4rem;
+      border-radius: 999px;
+      background: #e5e7eb;
+      font-size: 0.75rem;
+      margin-left: 0.35rem;
+    }
+    @media (max-width: 480px) {
+      h1 {
+        font-size: 1.3rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>Monthly Budget</h1>
+    <p class="muted" id="monthInfo"></p>
+
+    <!-- Incomes -->
+    <section>
+      <h2>Incomes</h2>
+      <p class="muted">You can add multiple incomes (e.g. paycheck, side job). Use a day of month (1–31); leave blank to treat as spread across the month.</p>
+      <div id="incomeContainer"></div>
+      <button class="btn-secondary" id="addIncomeBtn">+ Add Income</button>
+    </section>
+
+    <!-- Expenses -->
+    <section style="margin-top:1rem;">
+      <h2>Expenses</h2>
+      <p class="muted">Each expense has a monthly amount and an optional due day (1–31). Leave day blank to treat it as spread across the month.</p>
+      <div id="expensesContainer"></div>
+      <button class="btn-secondary" id="addExpenseBtn">+ Add Expense</button>
+    </section>
+
+    <!-- Actions -->
+    <section style="margin-top: 1rem;">
+      <button class="btn-primary" id="calcBtn">Recalculate</button>
+      <button class="btn-secondary" id="resetBtn" style="margin-left:0.5rem;">Reset saved data</button>
+      <span class="muted" style="margin-left: 0.5rem;">Settings save automatically on this device.</span>
+    </section>
+
+    <!-- Results -->
+    <section class="summary" id="summarySection" style="display:none;">
+      <div id="progressText"></div>
+      <div style="margin-top:0.5rem;">
+        <strong>Totals for entire month</strong>
+        <div>Income: <span id="totalIncome"></span></div>
+        <div>Expenses: <span id="totalExpenses"></span></div>
+        <div>Net (month): <span id="netMonth"></span></div>
+      </div>
+      <hr style="margin:0.75rem 0;border:none;border-top:1px solid #e5e7eb;">
+      <div>
+        <strong>As of today (based on dates)</strong>
+        <div>Income received so far: <span id="incomeSoFar"></span></div>
+        <div>Expenses due so far: <span id="expensesSoFar"></span></div>
+        <div>Net as of today: <span id="netToday"></span></div>
+      </div>
+    </section>
+
+    <!-- Income breakdown -->
+    <section id="incomeTableSection" style="margin-top:1rem; display:none;">
+      <h3>Income breakdown<span class="tag">by date</span></h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Income</th>
+            <th class="center">Day</th>
+            <th class="right">Monthly</th>
+            <th class="right">Paid so far</th>
+          </tr>
+        </thead>
+        <tbody id="incomeTableBody"></tbody>
+      </table>
+    </section>
+
+    <!-- Expense breakdown -->
+    <section id="expenseTableSection" style="margin-top:1rem; display:none;">
+      <h3>Expense breakdown<span class="tag">by date</span></h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Expense</th>
+            <th class="center">Day</th>
+            <th class="right">Monthly</th>
+            <th class="right">Paid so far</th>
+          </tr>
+        </thead>
+        <tbody id="expenseTableBody"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <script>
+    // ---- PWA: service worker registration ----
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .catch(err => console.warn('SW registration failed:', err));
+      });
+    }
+
+    // ---- Date & month info ----
+    const today = new Date();
+    const year = today.getFullYear();
+    const monthIndex = today.getMonth(); // 0-based
+    const day = today.getDate();
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+    const fractionOfMonth = day / daysInMonth;
+
+    const monthNames = [
+      "January","February","March","April","May","June",
+      "July","August","September","October","November","December"
+    ];
+    const monthInfoEl = document.getElementById("monthInfo");
+    monthInfoEl.textContent =
+      `${monthNames[monthIndex]} ${year} — Day ${day} of ${daysInMonth} ` +
+      `(${(fractionOfMonth * 100).toFixed(1)}% through the month)`;
+
+    // ---- Elements ----
+    const incomeContainer = document.getElementById("incomeContainer");
+    const expensesContainer = document.getElementById("expensesContainer");
+    const addIncomeBtn = document.getElementById("addIncomeBtn");
+    const addExpenseBtn = document.getElementById("addExpenseBtn");
+    const calcBtn = document.getElementById("calcBtn");
+    const resetBtn = document.getElementById("resetBtn");
+
+    const summarySection = document.getElementById("summarySection");
+    const incomeTableSection = document.getElementById("incomeTableSection");
+    const expenseTableSection = document.getElementById("expenseTableSection");
+    const incomeTableBody = document.getElementById("incomeTableBody");
+    const expenseTableBody = document.getElementById("expenseTableBody");
+
+    const totalIncomeEl = document.getElementById("totalIncome");
+    const totalExpensesEl = document.getElementById("totalExpenses");
+    const netMonthEl = document.getElementById("netMonth");
+    const incomeSoFarEl = document.getElementById("incomeSoFar");
+    const expensesSoFarEl = document.getElementById("expensesSoFar");
+    const netTodayEl = document.getElementById("netToday");
+    const progressTextEl = document.getElementById("progressText");
+
+    const STORAGE_KEY = "simpleMonthlyBudget_v2";
+
+    function formatMoney(value) {
+      if (isNaN(value)) value = 0;
+      return "$" + value.toFixed(2);
+    }
+
+    function cleanDay(dayVal) {
+      if (dayVal === null || dayVal === undefined || dayVal === "") return null;
+      const d = parseInt(dayVal, 10);
+      if (isNaN(d) || d < 1) return null;
+      // clamp to last day of month so "31" still works in short months
+      return Math.min(d, daysInMonth);
+    }
+
+    function amountPaidForItem(amount, dayOfItem) {
+      if (amount <= 0) return 0;
+      if (dayOfItem === null) {
+        // no specific date: treat as evenly spread
+        return amount * fractionOfMonth;
+      }
+      if (dayOfItem <= day) {
+        return amount;
+      }
+      return 0;
+    }
+
+    // ---- State helpers (save / load) ----
+    function getCurrentIncomes() {
+      const rows = incomeContainer.querySelectorAll(".income-row");
+      const items = [];
+      rows.forEach(row => {
+        const nameInput = row.querySelector(".name-input");
+        const amountInput = row.querySelector(".amount-input");
+        const dayInput = row.querySelector(".day-input");
+        const name = (nameInput?.value || "").trim();
+        const amount = amountInput?.value || "";
+        const dayVal = dayInput?.value || "";
+        if (name !== "" || amount !== "" || dayVal !== "") {
+          items.push({ name, amount, day: dayVal });
+        }
+      });
+      return items;
+    }
+
+    function getCurrentExpenses() {
+      const rows = expensesContainer.querySelectorAll(".expense-row");
+      const items = [];
+      rows.forEach(row => {
+        const nameInput = row.querySelector(".name-input");
+        const amountInput = row.querySelector(".amount-input");
+        const dayInput = row.querySelector(".day-input");
+        const name = (nameInput?.value || "").trim();
+        const amount = amountInput?.value || "";
+        const dayVal = dayInput?.value || "";
+        if (name !== "" || amount !== "" || dayVal !== "") {
+          items.push({ name, amount, day: dayVal });
+        }
+      });
+      return items;
+    }
+
+    function saveState() {
+      const data = {
+        incomes: getCurrentIncomes(),
+        expenses: getCurrentExpenses()
+      };
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      } catch (e) {
+        console.warn("Unable to save budget data:", e);
+      }
+    }
+
+    function loadState() {
+      let data = null;
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) data = JSON.parse(raw);
+      } catch (e) {
+        console.warn("Unable to load budget data:", e);
+      }
+
+      incomeContainer.innerHTML = "";
+      expensesContainer.innerHTML = "";
+
+      if (data && typeof data === "object") {
+        const incomes = Array.isArray(data.incomes) ? data.incomes : [];
+        const expenses = Array.isArray(data.expenses) ? data.expenses : [];
+
+        if (incomes.length > 0) {
+          incomes.forEach(i => addIncomeRow(i.name || "", i.amount || "", i.day || ""));
+        } else {
+          addIncomeRow("Paycheck", "", "1");
+        }
+
+        if (expenses.length > 0) {
+          expenses.forEach(e => addExpenseRow(e.name || "", e.amount || "", e.day || ""));
+        } else {
+          addExpenseRow("Rent", "", "1");
+          addExpenseRow("Groceries", "", "");
+        }
+      } else {
+        addIncomeRow("Paycheck", "", "1");
+        addExpenseRow("Rent", "", "1");
+        addExpenseRow("Groceries", "", "");
+      }
+    }
+
+    // ---- UI row creation ----
+    function addIncomeRow(name = "", amount = "", dayVal = "") {
+      const row = document.createElement("div");
+      row.className = "row income-row";
+
+      const nameDiv = document.createElement("div");
+      nameDiv.className = "col";
+      const amountDiv = document.createElement("div");
+      amountDiv.className = "col";
+      const dayDiv = document.createElement("div");
+      dayDiv.className = "col-small";
+      const buttonDiv = document.createElement("div");
+      buttonDiv.className = "col-small";
+
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.placeholder = "Name (paycheck, side job, etc.)";
+      nameInput.value = name;
+      nameInput.className = "name-input";
+
+      const amountInput = document.createElement("input");
+      amountInput.type = "number";
+      amountInput.placeholder = "Amount";
+      amountInput.step = "0.01";
+      amountInput.value = amount;
+      amountInput.className = "amount-input";
+
+      const dayInput = document.createElement("input");
+      dayInput.type = "number";
+      dayInput.placeholder = "Day";
+      dayInput.min = "1";
+      dayInput.max = "31";
+      dayInput.value = dayVal;
+      dayInput.className = "day-input";
+
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "btn-danger";
+      removeBtn.textContent = "Remove";
+      removeBtn.onclick = () => {
+        incomeContainer.removeChild(row);
+        saveState();
+      };
+
+      nameInput.addEventListener("input", saveState);
+      amountInput.addEventListener("input", saveState);
+      dayInput.addEventListener("input", saveState);
+
+      nameDiv.appendChild(nameInput);
+      amountDiv.appendChild(amountInput);
+      dayDiv.appendChild(dayInput);
+      buttonDiv.appendChild(removeBtn);
+
+      row.appendChild(nameDiv);
+      row.appendChild(amountDiv);
+      row.appendChild(dayDiv);
+      row.appendChild(buttonDiv);
+
+      incomeContainer.appendChild(row);
+    }
+
+    function addExpenseRow(name = "", amount = "", dayVal = "") {
+      const row = document.createElement("div");
+      row.className = "row expense-row";
+
+      const nameDiv = document.createElement("div");
+      nameDiv.className = "col";
+      const amountDiv = document.createElement("div");
+      amountDiv.className = "col";
+      const dayDiv = document.createElement("div");
+      dayDiv.className = "col-small";
+      const buttonDiv = document.createElement("div");
+      buttonDiv.className = "col-small";
+
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.placeholder = "Name (rent, groceries, etc.)";
+      nameInput.value = name;
+      nameInput.className = "name-input";
+
+      const amountInput = document.createElement("input");
+      amountInput.type = "number";
+      amountInput.placeholder = "Amount";
+      amountInput.step = "0.01";
+      amountInput.value = amount;
+      amountInput.className = "amount-input";
+
+      const dayInput = document.createElement("input");
+      dayInput.type = "number";
+      dayInput.placeholder = "Day";
+      dayInput.min = "1";
+      dayInput.max = "31";
+      dayInput.value = dayVal;
+      dayInput.className = "day-input";
+
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "btn-danger";
+      removeBtn.textContent = "Remove";
+      removeBtn.onclick = () => {
+        expensesContainer.removeChild(row);
+        saveState();
+      };
+
+      nameInput.addEventListener("input", saveState);
+      amountInput.addEventListener("input", saveState);
+      dayInput.addEventListener("input", saveState);
+
+      nameDiv.appendChild(nameInput);
+      amountDiv.appendChild(amountInput);
+      dayDiv.appendChild(dayInput);
+      buttonDiv.appendChild(removeBtn);
+
+      row.appendChild(nameDiv);
+      row.appendChild(amountDiv);
+      row.appendChild(dayDiv);
+      row.appendChild(buttonDiv);
+
+      expensesContainer.appendChild(row);
+    }
+
+    // ---- Event handlers ----
+    addIncomeBtn.addEventListener("click", () => {
+      addIncomeRow();
+      saveState();
+    });
+
+    addExpenseBtn.addEventListener("click", () => {
+      addExpenseRow();
+      saveState();
+    });
+
+    calcBtn.addEventListener("click", () => {
+      saveState();
+
+      // Build numeric incomes
+      const incomesRaw = getCurrentIncomes();
+      const incomes = incomesRaw
+        .map(i => {
+          const amount = parseFloat(i.amount) || 0;
+          const d = cleanDay(i.day);
+          const name = i.name.trim() || "Income";
+          return { name, amount, day: d };
+        })
+        .filter(i => i.amount > 0);
+
+      // Build numeric expenses
+      const expensesRaw = getCurrentExpenses();
+      const expenses = expensesRaw
+        .map(e => {
+          const amount = parseFloat(e.amount) || 0;
+          const d = cleanDay(e.day);
+          const name = e.name.trim() || "Expense";
+          return { name, amount, day: d };
+        })
+        .filter(e => e.amount > 0);
+
+      const totalIncome = incomes.reduce((sum, i) => sum + i.amount, 0);
+      const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+      const netMonth = totalIncome - totalExpenses;
+
+      const incomeSoFar = incomes.reduce(
+        (sum, i) => sum + amountPaidForItem(i.amount, i.day),
+        0
+      );
+      const expensesSoFar = expenses.reduce(
+        (sum, e) => sum + amountPaidForItem(e.amount, e.day),
+        0
+      );
+      const netToday = incomeSoFar - expensesSoFar;
+
+      summarySection.style.display = "block";
+      progressTextEl.textContent =
+        "Items with a day ≤ today are treated as fully paid; items with a blank day are spread evenly across the month.";
+
+      totalIncomeEl.textContent = formatMoney(totalIncome);
+      totalExpensesEl.textContent = formatMoney(totalExpenses);
+      netMonthEl.textContent = formatMoney(netMonth);
+
+      incomeSoFarEl.textContent = formatMoney(incomeSoFar);
+      expensesSoFarEl.textContent = formatMoney(expensesSoFar);
+      netTodayEl.textContent = formatMoney(netToday);
+
+      // Income breakdown table
+      incomeTableBody.innerHTML = "";
+      incomes.forEach(i => {
+        const tr = document.createElement("tr");
+        const tdName = document.createElement("td");
+        const tdDay = document.createElement("td");
+        const tdMonth = document.createElement("td");
+        const tdSoFar = document.createElement("td");
+
+        tdName.textContent = i.name;
+        tdDay.className = "center";
+        tdMonth.className = "right";
+        tdSoFar.className = "right";
+
+        tdDay.textContent = i.day === null ? "–" : i.day;
+        tdMonth.textContent = formatMoney(i.amount);
+        tdSoFar.textContent = formatMoney(amountPaidForItem(i.amount, i.day));
+
+        tr.appendChild(tdName);
+        tr.appendChild(tdDay);
+        tr.appendChild(tdMonth);
+        tr.appendChild(tdSoFar);
+        incomeTableBody.appendChild(tr);
+      });
+      incomeTableSection.style.display = incomes.length ? "block" : "none";
+
+      // Expense breakdown table
+      expenseTableBody.innerHTML = "";
+      expenses.forEach(e => {
+        const tr = document.createElement("tr");
+        const tdName = document.createElement("td");
+        const tdDay = document.createElement("td");
+        const tdMonth = document.createElement("td");
+        const tdSoFar = document.createElement("td");
+
+        tdName.textContent = e.name;
+        tdDay.className = "center";
+        tdMonth.className = "right";
+        tdSoFar.className = "right";
+
+        tdDay.textContent = e.day === null ? "–" : e.day;
+        tdMonth.textContent = formatMoney(e.amount);
+        tdSoFar.textContent = formatMoney(amountPaidForItem(e.amount, e.day));
+
+        tr.appendChild(tdName);
+        tr.appendChild(tdDay);
+        tr.appendChild(tdMonth);
+        tr.appendChild(tdSoFar);
+        expenseTableBody.appendChild(tr);
+      });
+      expenseTableSection.style.display = expenses.length ? "block" : "none";
+    });
+
+    resetBtn.addEventListener("click", () => {
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch (e) {
+        console.warn("Unable to clear budget data:", e);
+      }
+      summarySection.style.display = "none";
+      incomeTableSection.style.display = "none";
+      expenseTableSection.style.display = "none";
+      loadState();
+    });
+
+    // ---- Initialize ----
+    loadState();
+  </script>
+</body>
+</html>
