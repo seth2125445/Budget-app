@@ -1,11 +1,13 @@
-const CACHE_NAME = "budget-app-v1";
+const CACHE_NAME = "budget-app-v2";  // <-- bumped version
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.webmanifest"
+  // add icons here if/when you have them
 ];
 
 self.addEventListener("install", (event) => {
+  self.skipWaiting(); // activate this SW immediately
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
   );
@@ -19,7 +21,7 @@ self.addEventListener("activate", (event) => {
           .filter((key) => key !== CACHE_NAME)
           .map((key) => caches.delete(key))
       )
-    )
+    ).then(() => self.clients.claim())
   );
 });
 
