@@ -31,7 +31,7 @@
       border-radius: 8px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.08);
     }
-    h1, h2, h3 {
+    h1, h2, h3, h4 {
       margin-top: 0.5rem;
       margin-bottom: 0.75rem;
     }
@@ -158,12 +158,27 @@
     <h1>Monthly Budget</h1>
     <p class="muted" id="monthInfo"></p>
 
+    <!-- Starting balance -->
+    <section>
+      <h2>Starting balance</h2>
+      <p class="muted">
+        Balance in your main account at the beginning of this month.
+      </p>
+      <input
+        type="number"
+        id="startingBalanceInput"
+        placeholder="e.g. 500"
+        step="0.01"
+      />
+    </section>
+
     <!-- Incomes -->
     <section>
       <h2>Incomes</h2>
       <p class="muted">
-        For each income, enter the amount you receive each time, the <strong>next payday</strong>,
-        and how often it repeats. Items without a date are treated as spread across the month.
+        For each income, enter the amount you receive each time, the
+        <strong>next payday</strong>, and how often it repeats.
+        Items without a date are treated as spread across the month.
       </p>
       <div id="incomeContainer"></div>
       <button class="btn-secondary" id="addIncomeBtn">+ Add Income</button>
@@ -173,8 +188,8 @@
     <section style="margin-top:1rem;">
       <h2>Expenses</h2>
       <p class="muted">
-        Same idea: enter each bill/expense with amount, next due date, and how often it repeats.
-        Blank date = spread evenly across the month.
+        Same idea: enter each bill/expense with amount, next due date,
+        and how often it repeats. Blank date = spread evenly across the month.
       </p>
       <div id="expensesContainer"></div>
       <button class="btn-secondary" id="addExpenseBtn">+ Add Expense</button>
@@ -183,8 +198,24 @@
     <!-- Actions -->
     <section style="margin-top: 1rem;">
       <button class="btn-primary" id="calcBtn">Recalculate</button>
-      <button class="btn-secondary" id="resetBtn" style="margin-left:0.5rem;">Reset saved data</button>
-      <span class="muted" style="margin-left: 0.5rem;">Settings save automatically on this device.</span>
+      <button class="btn-secondary" id="resetBtn" style="margin-left:0.5rem;">
+        Reset saved data
+      </button>
+      <button class="btn-secondary" id="exportBtn" style="margin-left:0.5rem;">
+        Save to file
+      </button>
+      <button class="btn-secondary" id="importBtn" style="margin-left:0.5rem;">
+        Load from file
+      </button>
+      <input
+        type="file"
+        id="importFileInput"
+        accept="application/json"
+        style="display:none;"
+      />
+      <span class="muted" style="display:block;margin-top:0.4rem;">
+        Data saves locally and can be exported/imported as a JSON file.
+      </span>
     </section>
 
     <!-- Results -->
@@ -192,16 +223,19 @@
       <div id="progressText"></div>
       <div style="margin-top:0.5rem;">
         <strong>Totals for this month</strong>
+        <div>Starting balance: <span id="startingBalanceDisplay"></span></div>
         <div>Income (this month): <span id="totalIncome"></span></div>
         <div>Expenses (this month): <span id="totalExpenses"></span></div>
-        <div>Net (month): <span id="netMonth"></span></div>
+        <div>Net (income − expenses): <span id="netMonth"></span></div>
       </div>
       <hr style="margin:0.75rem 0;border:none;border-top:1px solid #e5e7eb;">
       <div>
         <strong>As of today</strong>
         <div>Income received so far: <span id="incomeSoFar"></span></div>
         <div>Expenses due so far: <span id="expensesSoFar"></span></div>
-        <div>Net as of today: <span id="netToday"></span></div>
+        <div>Net (income − expenses) as of today: <span id="netToday"></span></div>
+        <div>Balance as of today: <span id="balanceToday"></span></div>
+        <div>Projected final balance (end of month): <span id="finalBalance"></span></div>
       </div>
     </section>
 
@@ -224,7 +258,17 @@
 
     <!-- Expense breakdown -->
     <section id="expenseTableSection" style="margin-top:1rem; display:none;">
-      <h3>Expense breakdown<span class="tag">by date & frequency</span></h3>
+      <h3>Expense breakdown<span class="tag">paid vs remaining</span></h3>
+      <p class="muted">
+        Paid = all occurrences up to today. Remaining = the rest of this month,
+        including prorated items.
+      </p>
+      <p>
+        <strong>Yet to be paid this month:</strong>
+        <span id="totalRemainingExpenses"></span>
+      </p>
+
+      <h4>Paid / already due expenses</h4>
       <table>
         <thead>
           <tr>
@@ -233,9 +277,25 @@
             <th class="center">Frequency</th>
             <th class="right">This month</th>
             <th class="right">Paid so far</th>
+            <th class="right">Remaining</th>
           </tr>
         </thead>
-        <tbody id="expenseTableBody"></tbody>
+        <tbody id="expensePaidBody"></tbody>
+      </table>
+
+      <h4>Upcoming / remaining expenses</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Expense</th>
+            <th class="center">Next date</th>
+            <th class="center">Frequency</th>
+            <th class="right">This month</th>
+            <th class="right">Paid so far</th>
+            <th class="right">Remaining</th>
+          </tr>
+        </thead>
+        <tbody id="expenseRemainingBody"></tbody>
       </table>
     </section>
   </div>
@@ -269,18 +329,24 @@
       `(${(fractionOfMonth * 100).toFixed(1)}% through the month)`;
 
     // ---- Elements ----
+    const startingBalanceInput = document.getElementById("startingBalanceInput");
+
     const incomeContainer = document.getElementById("incomeContainer");
     const expensesContainer = document.getElementById("expensesContainer");
     const addIncomeBtn = document.getElementById("addIncomeBtn");
     const addExpenseBtn = document.getElementById("addExpenseBtn");
     const calcBtn = document.getElementById("calcBtn");
     const resetBtn = document.getElementById("resetBtn");
+    const exportBtn = document.getElementById("exportBtn");
+    const importBtn = document.getElementById("importBtn");
+    const importFileInput = document.getElementById("importFileInput");
 
     const summarySection = document.getElementById("summarySection");
     const incomeTableSection = document.getElementById("incomeTableSection");
     const expenseTableSection = document.getElementById("expenseTableSection");
     const incomeTableBody = document.getElementById("incomeTableBody");
-    const expenseTableBody = document.getElementById("expenseTableBody");
+    const expensePaidBody = document.getElementById("expensePaidBody");
+    const expenseRemainingBody = document.getElementById("expenseRemainingBody");
 
     const totalIncomeEl = document.getElementById("totalIncome");
     const totalExpensesEl = document.getElementById("totalExpenses");
@@ -288,8 +354,13 @@
     const incomeSoFarEl = document.getElementById("incomeSoFar");
     const expensesSoFarEl = document.getElementById("expensesSoFar");
     const netTodayEl = document.getElementById("netToday");
+    const balanceTodayEl = document.getElementById("balanceToday");
+    const finalBalanceEl = document.getElementById("finalBalance");
+    const startingBalanceDisplay = document.getElementById("startingBalanceDisplay");
+    const totalRemainingExpensesEl = document.getElementById("totalRemainingExpenses");
     const progressTextEl = document.getElementById("progressText");
 
+    // Keep same key so old data loads
     const STORAGE_KEY = "simpleMonthlyBudget_v3";
 
     const FREQ_LABELS = {
@@ -322,19 +393,16 @@
       const d = new Date(base);
       const targetDay = d.getDate();
       d.setMonth(d.getMonth() + months);
-      // handle short months by snapping to last day
       if (d.getDate() < targetDay) {
         d.setDate(0);
       }
       return d;
     }
 
-    // Occurrences within current month for weekly/biweekly
     function getOccurrencesStepDays(baseDate, stepDays) {
       const occ = [];
       if (!baseDate || isNaN(baseDate)) return occ;
 
-      // Step backwards from base until well before this month
       let d = new Date(baseDate);
       const minDate = new Date(firstDayOfMonth);
       minDate.setDate(minDate.getDate() - stepDays * 3);
@@ -346,7 +414,6 @@
         d = addDays(d, -stepDays);
       }
 
-      // Step forwards
       d = addDays(baseDate, stepDays);
       const maxDate = new Date(lastDayOfMonth);
       maxDate.setDate(maxDate.getDate() + stepDays * 3);
@@ -362,20 +429,17 @@
       return occ;
     }
 
-    // Occurrences within current month for monthly frequency
     function getMonthlyOccurrences(baseDate) {
       const occ = [];
       if (!baseDate || isNaN(baseDate)) return occ;
 
       let d = new Date(baseDate);
-      // step backwards
       while (d >= firstDayOfMonth) {
         if (d <= lastDayOfMonth) {
           occ.push(new Date(d));
         }
         d = addMonths(d, -1);
       }
-      // step forwards
       d = addMonths(baseDate, 1);
       while (d <= lastDayOfMonth) {
         if (d >= firstDayOfMonth) {
@@ -388,7 +452,7 @@
       return occ;
     }
 
-    // ---- State helpers (save / load) ----
+    // ---- State helpers ----
     function getCurrentIncomes() {
       const rows = incomeContainer.querySelectorAll(".income-row");
       const items = [];
@@ -427,16 +491,60 @@
       return items;
     }
 
-    function saveState() {
-      const data = {
+    function buildStateObject() {
+      return {
+        version: 1,
+        year,
+        monthIndex,
+        startingBalance: startingBalanceInput.value || "",
         incomes: getCurrentIncomes(),
         expenses: getCurrentExpenses()
       };
+    }
+
+    function saveState() {
+      const data = buildStateObject();
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       } catch (e) {
         console.warn("Unable to save budget data:", e);
       }
+    }
+
+    function applyStateObject(data) {
+      if (!data || typeof data !== "object") return;
+
+      const sb =
+        data.startingBalance ??
+        data.starting_balance ??
+        "";
+
+      startingBalanceInput.value = sb;
+
+      incomeContainer.innerHTML = "";
+      expensesContainer.innerHTML = "";
+
+      const incomes = Array.isArray(data.incomes) ? data.incomes : [];
+      const expenses = Array.isArray(data.expenses) ? data.expenses : [];
+
+      if (incomes.length > 0) {
+        incomes.forEach(i =>
+          addIncomeRow(i.name || "", i.amount || "", i.nextDate || "", i.freq || "monthly")
+        );
+      } else {
+        addIncomeRow("Paycheck", "", "", "biweekly");
+      }
+
+      if (expenses.length > 0) {
+        expenses.forEach(e =>
+          addExpenseRow(e.name || "", e.amount || "", e.nextDate || "", e.freq || "monthly")
+        );
+      } else {
+        addExpenseRow("Rent", "", "", "monthly");
+        addExpenseRow("Groceries", "", "", "weekly");
+      }
+
+      saveState();
     }
 
     function loadState() {
@@ -452,26 +560,9 @@
       expensesContainer.innerHTML = "";
 
       if (data && typeof data === "object") {
-        const incomes = Array.isArray(data.incomes) ? data.incomes : [];
-        const expenses = Array.isArray(data.expenses) ? data.expenses : [];
-
-        if (incomes.length > 0) {
-          incomes.forEach(i =>
-            addIncomeRow(i.name || "", i.amount || "", i.nextDate || "", i.freq || "monthly")
-          );
-        } else {
-          addIncomeRow("Paycheck", "", "", "biweekly");
-        }
-
-        if (expenses.length > 0) {
-          expenses.forEach(e =>
-            addExpenseRow(e.name || "", e.amount || "", e.nextDate || "", e.freq || "monthly")
-          );
-        } else {
-          addExpenseRow("Rent", "", "", "monthly");
-          addExpenseRow("Groceries", "", "", "weekly");
-        }
+        applyStateObject(data);
       } else {
+        startingBalanceInput.value = "";
         addIncomeRow("Paycheck", "", "", "biweekly");
         addExpenseRow("Rent", "", "", "monthly");
         addExpenseRow("Groceries", "", "", "weekly");
@@ -637,7 +728,6 @@
           const dateStr = item.nextDate || "";
 
           if (dateStr) {
-            // Interpret date input as local date
             const d = new Date(dateStr + "T00:00:00");
             if (!isNaN(d.getTime())) {
               dateObj = d;
@@ -645,7 +735,6 @@
           }
 
           if (!dateObj) {
-            // If no valid date, treat as prorated
             freq = "prorated";
           }
 
@@ -671,7 +760,7 @@
         let paidSoFar = 0;
 
         if (amount <= 0) {
-          breakdown.push({ name, nextDateStr, freq, monthTotal, paidSoFar });
+          breakdown.push({ name, nextDateStr, freq, monthTotal, paidSoFar, remaining: 0 });
           return;
         }
 
@@ -700,6 +789,8 @@
           paidSoFar = amount * countPaid;
         }
 
+        const remaining = monthTotal - paidSoFar;
+
         totalMonth += monthTotal;
         totalSoFar += paidSoFar;
 
@@ -708,12 +799,59 @@
           nextDateStr,
           freq,
           monthTotal,
-          paidSoFar
+          paidSoFar,
+          remaining
         });
       });
 
       return { totalMonth, totalSoFar, breakdown };
     }
+
+    // ---- Export / Import ----
+    exportBtn.addEventListener("click", () => {
+      // Ensure we have the latest edits
+      saveState();
+      const data = buildStateObject();
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const mm = String(monthIndex + 1).padStart(2, "0");
+      const dd = String(day).padStart(2, "0");
+      a.href = url;
+      a.download = `budget-data-${year}-${mm}-${dd}.json`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 0);
+    });
+
+    importBtn.addEventListener("click", () => {
+      importFileInput.click();
+    });
+
+    importFileInput.addEventListener("change", (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const text = e.target.result;
+          const data = JSON.parse(text);
+          applyStateObject(data);
+          summarySection.style.display = "none";
+          incomeTableSection.style.display = "none";
+          expenseTableSection.style.display = "none";
+        } catch (err) {
+          console.error("Error reading file:", err);
+          alert("Could not read this file. Make sure it is a JSON file exported from this app.");
+        }
+      };
+      reader.readAsText(file);
+      importFileInput.value = "";
+    });
 
     // ---- Event handlers ----
     addIncomeBtn.addEventListener("click", () => {
@@ -726,8 +864,12 @@
       saveState();
     });
 
+    startingBalanceInput.addEventListener("input", saveState);
+
     calcBtn.addEventListener("click", () => {
       saveState();
+
+      const startingBalance = parseFloat(startingBalanceInput.value) || 0;
 
       const incomesRaw = getCurrentIncomes();
       const expensesRaw = getCurrentExpenses();
@@ -746,10 +888,19 @@
       const expensesSoFar = expenseCalc.totalSoFar;
       const netToday = incomeSoFar - expensesSoFar;
 
+      const balanceToday = startingBalance + netToday;
+      const finalBalance = startingBalance + netMonth;
+
+      const totalRemainingExpenses = expenseCalc.breakdown.reduce(
+        (sum, e) => sum + e.remaining,
+        0
+      );
+
       summarySection.style.display = "block";
       progressTextEl.textContent =
         "Recurring items are calculated based on how many occurrences fall in this month and how many of those have passed as of today. Blank dates are treated as evenly spread across the month.";
 
+      startingBalanceDisplay.textContent = formatMoney(startingBalance);
       totalIncomeEl.textContent = formatMoney(totalIncome);
       totalExpensesEl.textContent = formatMoney(totalExpenses);
       netMonthEl.textContent = formatMoney(netMonth);
@@ -757,6 +908,12 @@
       incomeSoFarEl.textContent = formatMoney(incomeSoFar);
       expensesSoFarEl.textContent = formatMoney(expensesSoFar);
       netTodayEl.textContent = formatMoney(netToday);
+      balanceTodayEl.textContent = formatMoney(balanceToday);
+      finalBalanceEl.textContent = formatMoney(finalBalance);
+
+      totalRemainingExpensesEl.textContent = formatMoney(
+        Math.max(totalRemainingExpenses, 0)
+      );
 
       // Income breakdown table
       incomeTableBody.innerHTML = "";
@@ -789,8 +946,10 @@
       });
       incomeTableSection.style.display = incomes.length ? "block" : "none";
 
-      // Expense breakdown table
-      expenseTableBody.innerHTML = "";
+      // Expense breakdown tables: split into paid vs remaining
+      expensePaidBody.innerHTML = "";
+      expenseRemainingBody.innerHTML = "";
+
       expenseCalc.breakdown.forEach(e => {
         const tr = document.createElement("tr");
         const tdName = document.createElement("td");
@@ -798,27 +957,38 @@
         const tdFreq = document.createElement("td");
         const tdMonth = document.createElement("td");
         const tdSoFar = document.createElement("td");
+        const tdRem = document.createElement("td");
 
         tdName.textContent = e.name;
         tdDate.className = "center";
         tdFreq.className = "center";
         tdMonth.className = "right";
         tdSoFar.className = "right";
+        tdRem.className = "right";
 
         const d = e.nextDateStr ? new Date(e.nextDateStr + "T00:00:00") : null;
         tdDate.textContent = formatDateDisplay(d);
         tdFreq.textContent = FREQ_LABELS[e.freq] || e.freq;
         tdMonth.textContent = formatMoney(e.monthTotal);
         tdSoFar.textContent = formatMoney(e.paidSoFar);
+        tdRem.textContent = formatMoney(Math.max(e.remaining, 0));
 
         tr.appendChild(tdName);
         tr.appendChild(tdDate);
         tr.appendChild(tdFreq);
         tr.appendChild(tdMonth);
         tr.appendChild(tdSoFar);
-        expenseTableBody.appendChild(tr);
+        tr.appendChild(tdRem);
+
+        if (e.remaining <= 0.01) {
+          expensePaidBody.appendChild(tr);
+        } else {
+          expenseRemainingBody.appendChild(tr);
+        }
       });
-      expenseTableSection.style.display = expenses.length ? "block" : "none";
+
+      const hasExpenses = expenses.length > 0;
+      expenseTableSection.style.display = hasExpenses ? "block" : "none";
     });
 
     resetBtn.addEventListener("click", () => {
