@@ -1,4 +1,4 @@
-const CACHE_NAME = "budget-app-v3";  // <-- bumped version
+const CACHE_NAME = "budget-app-v5";  // <-- bumped version
 const ASSETS = [
   "./",
   "./index.html",
