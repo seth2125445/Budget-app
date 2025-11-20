@@ -24,7 +24,7 @@
       background: #f5f5f5;
     }
     .app {
-      max-width: 800px;
+      max-width: 900px;
       margin: 0 auto;
       background: #ffffff;
       padding: 1rem 1.5rem 1.5rem;
@@ -39,30 +39,45 @@
       font-size: 0.9rem;
       font-weight: 500;
     }
-    input[type="number"], input[type="text"] {
+    input[type="number"],
+    input[type="text"],
+    input[type="date"],
+    select {
       width: 100%;
-      padding: 0.4rem 0.5rem;
-      margin-top: 0.25rem;
-      margin-bottom: 0.5rem;
+      padding: 0.35rem 0.45rem;
+      margin-top: 0.2rem;
+      margin-bottom: 0.45rem;
       box-sizing: border-box;
       border-radius: 4px;
       border: 1px solid #ccc;
-      font-size: 0.95rem;
+      font-size: 0.9rem;
     }
     .row {
       display: flex;
-      gap: 0.75rem;
+      gap: 0.5rem;
       align-items: center;
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.3rem;
       flex-wrap: wrap;
     }
-    .row > .col {
-      flex: 1 1 0;
-      min-width: 120px;
+    .col-name {
+      flex: 1 1 160px;
+      min-width: 140px;
     }
-    .row > .col-small {
+    .col-amount {
+      flex: 0 0 110px;
+      min-width: 90px;
+    }
+    .col-date {
+      flex: 0 0 130px;
+      min-width: 110px;
+    }
+    .col-freq {
+      flex: 0 0 130px;
+      min-width: 110px;
+    }
+    .col-btn {
       flex: 0 0 80px;
-      min-width: 80px;
+      min-width: 70px;
     }
     button {
       border: none;
@@ -132,6 +147,9 @@
       h1 {
         font-size: 1.3rem;
       }
+      th, td {
+        font-size: 0.8rem;
+      }
     }
   </style>
 </head>
@@ -143,7 +161,10 @@
     <!-- Incomes -->
     <section>
       <h2>Incomes</h2>
-      <p class="muted">You can add multiple incomes (e.g. paycheck, side job). Use a day of month (1–31); leave blank to treat as spread across the month.</p>
+      <p class="muted">
+        For each income, enter the amount you receive each time, the <strong>next payday</strong>,
+        and how often it repeats. Items without a date are treated as spread across the month.
+      </p>
       <div id="incomeContainer"></div>
       <button class="btn-secondary" id="addIncomeBtn">+ Add Income</button>
     </section>
@@ -151,7 +172,10 @@
     <!-- Expenses -->
     <section style="margin-top:1rem;">
       <h2>Expenses</h2>
-      <p class="muted">Each expense has a monthly amount and an optional due day (1–31). Leave day blank to treat it as spread across the month.</p>
+      <p class="muted">
+        Same idea: enter each bill/expense with amount, next due date, and how often it repeats.
+        Blank date = spread evenly across the month.
+      </p>
       <div id="expensesContainer"></div>
       <button class="btn-secondary" id="addExpenseBtn">+ Add Expense</button>
     </section>
@@ -167,14 +191,14 @@
     <section class="summary" id="summarySection" style="display:none;">
       <div id="progressText"></div>
       <div style="margin-top:0.5rem;">
-        <strong>Totals for entire month</strong>
-        <div>Income: <span id="totalIncome"></span></div>
-        <div>Expenses: <span id="totalExpenses"></span></div>
+        <strong>Totals for this month</strong>
+        <div>Income (this month): <span id="totalIncome"></span></div>
+        <div>Expenses (this month): <span id="totalExpenses"></span></div>
         <div>Net (month): <span id="netMonth"></span></div>
       </div>
       <hr style="margin:0.75rem 0;border:none;border-top:1px solid #e5e7eb;">
       <div>
-        <strong>As of today (based on dates)</strong>
+        <strong>As of today</strong>
         <div>Income received so far: <span id="incomeSoFar"></span></div>
         <div>Expenses due so far: <span id="expensesSoFar"></span></div>
         <div>Net as of today: <span id="netToday"></span></div>
@@ -183,13 +207,14 @@
 
     <!-- Income breakdown -->
     <section id="incomeTableSection" style="margin-top:1rem; display:none;">
-      <h3>Income breakdown<span class="tag">by date</span></h3>
+      <h3>Income breakdown<span class="tag">by date & frequency</span></h3>
       <table>
         <thead>
           <tr>
             <th>Income</th>
-            <th class="center">Day</th>
-            <th class="right">Monthly</th>
+            <th class="center">Next date</th>
+            <th class="center">Frequency</th>
+            <th class="right">This month</th>
             <th class="right">Paid so far</th>
           </tr>
         </thead>
@@ -199,13 +224,14 @@
 
     <!-- Expense breakdown -->
     <section id="expenseTableSection" style="margin-top:1rem; display:none;">
-      <h3>Expense breakdown<span class="tag">by date</span></h3>
+      <h3>Expense breakdown<span class="tag">by date & frequency</span></h3>
       <table>
         <thead>
           <tr>
             <th>Expense</th>
-            <th class="center">Day</th>
-            <th class="right">Monthly</th>
+            <th class="center">Next date</th>
+            <th class="center">Frequency</th>
+            <th class="right">This month</th>
             <th class="right">Paid so far</th>
           </tr>
         </thead>
@@ -216,10 +242,10 @@
 
   <script>
     // ---- PWA: service worker registration ----
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-          .catch(err => console.warn('SW registration failed:', err));
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js")
+          .catch(err => console.warn("SW registration failed:", err));
       });
     }
 
@@ -228,7 +254,9 @@
     const year = today.getFullYear();
     const monthIndex = today.getMonth(); // 0-based
     const day = today.getDate();
-    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+    const firstDayOfMonth = new Date(year, monthIndex, 1);
+    const lastDayOfMonth = new Date(year, monthIndex + 1, 0);
+    const daysInMonth = lastDayOfMonth.getDate();
     const fractionOfMonth = day / daysInMonth;
 
     const monthNames = [
@@ -262,31 +290,102 @@
     const netTodayEl = document.getElementById("netToday");
     const progressTextEl = document.getElementById("progressText");
 
-    const STORAGE_KEY = "simpleMonthlyBudget_v2";
+    const STORAGE_KEY = "simpleMonthlyBudget_v3";
+
+    const FREQ_LABELS = {
+      monthly: "Monthly",
+      weekly: "Every week",
+      biweekly: "Every 2 weeks",
+      once: "Once",
+      prorated: "Prorated"
+    };
 
     function formatMoney(value) {
       if (isNaN(value)) value = 0;
       return "$" + value.toFixed(2);
     }
 
-    function cleanDay(dayVal) {
-      if (dayVal === null || dayVal === undefined || dayVal === "") return null;
-      const d = parseInt(dayVal, 10);
-      if (isNaN(d) || d < 1) return null;
-      // clamp to last day of month so "31" still works in short months
-      return Math.min(d, daysInMonth);
+    function formatDateDisplay(d) {
+      if (!d || isNaN(d)) return "–";
+      const m = d.getMonth() + 1;
+      const dd = d.getDate();
+      return `${m}/${dd}`;
     }
 
-    function amountPaidForItem(amount, dayOfItem) {
-      if (amount <= 0) return 0;
-      if (dayOfItem === null) {
-        // no specific date: treat as evenly spread
-        return amount * fractionOfMonth;
+    function addDays(base, days) {
+      const d = new Date(base);
+      d.setDate(d.getDate() + days);
+      return d;
+    }
+
+    function addMonths(base, months) {
+      const d = new Date(base);
+      const targetDay = d.getDate();
+      d.setMonth(d.getMonth() + months);
+      // handle short months by snapping to last day
+      if (d.getDate() < targetDay) {
+        d.setDate(0);
       }
-      if (dayOfItem <= day) {
-        return amount;
+      return d;
+    }
+
+    // Occurrences within current month for weekly/biweekly
+    function getOccurrencesStepDays(baseDate, stepDays) {
+      const occ = [];
+      if (!baseDate || isNaN(baseDate)) return occ;
+
+      // Step backwards from base until well before this month
+      let d = new Date(baseDate);
+      const minDate = new Date(firstDayOfMonth);
+      minDate.setDate(minDate.getDate() - stepDays * 3);
+
+      while (d >= minDate) {
+        if (d >= firstDayOfMonth && d <= lastDayOfMonth) {
+          occ.push(new Date(d));
+        }
+        d = addDays(d, -stepDays);
       }
-      return 0;
+
+      // Step forwards
+      d = addDays(baseDate, stepDays);
+      const maxDate = new Date(lastDayOfMonth);
+      maxDate.setDate(maxDate.getDate() + stepDays * 3);
+
+      while (d <= maxDate) {
+        if (d >= firstDayOfMonth && d <= lastDayOfMonth) {
+          occ.push(new Date(d));
+        }
+        d = addDays(d, stepDays);
+      }
+
+      occ.sort((a, b) => a - b);
+      return occ;
+    }
+
+    // Occurrences within current month for monthly frequency
+    function getMonthlyOccurrences(baseDate) {
+      const occ = [];
+      if (!baseDate || isNaN(baseDate)) return occ;
+
+      let d = new Date(baseDate);
+      // step backwards
+      while (d >= firstDayOfMonth) {
+        if (d <= lastDayOfMonth) {
+          occ.push(new Date(d));
+        }
+        d = addMonths(d, -1);
+      }
+      // step forwards
+      d = addMonths(baseDate, 1);
+      while (d <= lastDayOfMonth) {
+        if (d >= firstDayOfMonth) {
+          occ.push(new Date(d));
+        }
+        d = addMonths(d, 1);
+      }
+
+      occ.sort((a, b) => a - b);
+      return occ;
     }
 
     // ---- State helpers (save / load) ----
@@ -296,12 +395,14 @@
       rows.forEach(row => {
         const nameInput = row.querySelector(".name-input");
         const amountInput = row.querySelector(".amount-input");
-        const dayInput = row.querySelector(".day-input");
+        const dateInput = row.querySelector(".date-input");
+        const freqSelect = row.querySelector(".freq-select");
         const name = (nameInput?.value || "").trim();
         const amount = amountInput?.value || "";
-        const dayVal = dayInput?.value || "";
-        if (name !== "" || amount !== "" || dayVal !== "") {
-          items.push({ name, amount, day: dayVal });
+        const nextDate = dateInput?.value || "";
+        const freq = freqSelect?.value || "monthly";
+        if (name !== "" || amount !== "" || nextDate !== "") {
+          items.push({ name, amount, nextDate, freq });
         }
       });
       return items;
@@ -313,12 +414,14 @@
       rows.forEach(row => {
         const nameInput = row.querySelector(".name-input");
         const amountInput = row.querySelector(".amount-input");
-        const dayInput = row.querySelector(".day-input");
+        const dateInput = row.querySelector(".date-input");
+        const freqSelect = row.querySelector(".freq-select");
         const name = (nameInput?.value || "").trim();
         const amount = amountInput?.value || "";
-        const dayVal = dayInput?.value || "";
-        if (name !== "" || amount !== "" || dayVal !== "") {
-          items.push({ name, amount, day: dayVal });
+        const nextDate = dateInput?.value || "";
+        const freq = freqSelect?.value || "monthly";
+        if (name !== "" || amount !== "" || nextDate !== "") {
+          items.push({ name, amount, nextDate, freq });
         }
       });
       return items;
@@ -353,37 +456,64 @@
         const expenses = Array.isArray(data.expenses) ? data.expenses : [];
 
         if (incomes.length > 0) {
-          incomes.forEach(i => addIncomeRow(i.name || "", i.amount || "", i.day || ""));
+          incomes.forEach(i =>
+            addIncomeRow(i.name || "", i.amount || "", i.nextDate || "", i.freq || "monthly")
+          );
         } else {
-          addIncomeRow("Paycheck", "", "1");
+          addIncomeRow("Paycheck", "", "", "biweekly");
         }
 
         if (expenses.length > 0) {
-          expenses.forEach(e => addExpenseRow(e.name || "", e.amount || "", e.day || ""));
+          expenses.forEach(e =>
+            addExpenseRow(e.name || "", e.amount || "", e.nextDate || "", e.freq || "monthly")
+          );
         } else {
-          addExpenseRow("Rent", "", "1");
-          addExpenseRow("Groceries", "", "");
+          addExpenseRow("Rent", "", "", "monthly");
+          addExpenseRow("Groceries", "", "", "weekly");
         }
       } else {
-        addIncomeRow("Paycheck", "", "1");
-        addExpenseRow("Rent", "", "1");
-        addExpenseRow("Groceries", "", "");
+        addIncomeRow("Paycheck", "", "", "biweekly");
+        addExpenseRow("Rent", "", "", "monthly");
+        addExpenseRow("Groceries", "", "", "weekly");
       }
     }
 
     // ---- UI row creation ----
-    function addIncomeRow(name = "", amount = "", dayVal = "") {
+    function createFreqSelect(initial) {
+      const select = document.createElement("select");
+      select.className = "freq-select";
+      const options = [
+        { value: "monthly", label: "Monthly" },
+        { value: "biweekly", label: "Every 2 weeks" },
+        { value: "weekly", label: "Every week" },
+        { value: "once", label: "Once" }
+      ];
+      options.forEach(opt => {
+        const o = document.createElement("option");
+        o.value = opt.value;
+        o.textContent = opt.label;
+        select.appendChild(o);
+      });
+      select.value = initial && options.some(o => o.value === initial)
+        ? initial
+        : "monthly";
+      return select;
+    }
+
+    function addIncomeRow(name = "", amount = "", nextDate = "", freq = "monthly") {
       const row = document.createElement("div");
       row.className = "row income-row";
 
       const nameDiv = document.createElement("div");
-      nameDiv.className = "col";
+      nameDiv.className = "col-name";
       const amountDiv = document.createElement("div");
-      amountDiv.className = "col";
-      const dayDiv = document.createElement("div");
-      dayDiv.className = "col-small";
+      amountDiv.className = "col-amount";
+      const dateDiv = document.createElement("div");
+      dateDiv.className = "col-date";
+      const freqDiv = document.createElement("div");
+      freqDiv.className = "col-freq";
       const buttonDiv = document.createElement("div");
-      buttonDiv.className = "col-small";
+      buttonDiv.className = "col-btn";
 
       const nameInput = document.createElement("input");
       nameInput.type = "text";
@@ -393,18 +523,17 @@
 
       const amountInput = document.createElement("input");
       amountInput.type = "number";
-      amountInput.placeholder = "Amount";
+      amountInput.placeholder = "Amount per pay";
       amountInput.step = "0.01";
       amountInput.value = amount;
       amountInput.className = "amount-input";
 
-      const dayInput = document.createElement("input");
-      dayInput.type = "number";
-      dayInput.placeholder = "Day";
-      dayInput.min = "1";
-      dayInput.max = "31";
-      dayInput.value = dayVal;
-      dayInput.className = "day-input";
+      const dateInput = document.createElement("input");
+      dateInput.type = "date";
+      dateInput.value = nextDate;
+      dateInput.className = "date-input";
+
+      const freqSelect = createFreqSelect(freq);
 
       const removeBtn = document.createElement("button");
       removeBtn.className = "btn-danger";
@@ -416,33 +545,38 @@
 
       nameInput.addEventListener("input", saveState);
       amountInput.addEventListener("input", saveState);
-      dayInput.addEventListener("input", saveState);
+      dateInput.addEventListener("input", saveState);
+      freqSelect.addEventListener("change", saveState);
 
       nameDiv.appendChild(nameInput);
       amountDiv.appendChild(amountInput);
-      dayDiv.appendChild(dayInput);
+      dateDiv.appendChild(dateInput);
+      freqDiv.appendChild(freqSelect);
       buttonDiv.appendChild(removeBtn);
 
       row.appendChild(nameDiv);
       row.appendChild(amountDiv);
-      row.appendChild(dayDiv);
+      row.appendChild(dateDiv);
+      row.appendChild(freqDiv);
       row.appendChild(buttonDiv);
 
       incomeContainer.appendChild(row);
     }
 
-    function addExpenseRow(name = "", amount = "", dayVal = "") {
+    function addExpenseRow(name = "", amount = "", nextDate = "", freq = "monthly") {
       const row = document.createElement("div");
       row.className = "row expense-row";
 
       const nameDiv = document.createElement("div");
-      nameDiv.className = "col";
+      nameDiv.className = "col-name";
       const amountDiv = document.createElement("div");
-      amountDiv.className = "col";
-      const dayDiv = document.createElement("div");
-      dayDiv.className = "col-small";
+      amountDiv.className = "col-amount";
+      const dateDiv = document.createElement("div");
+      dateDiv.className = "col-date";
+      const freqDiv = document.createElement("div");
+      freqDiv.className = "col-freq";
       const buttonDiv = document.createElement("div");
-      buttonDiv.className = "col-small";
+      buttonDiv.className = "col-btn";
 
       const nameInput = document.createElement("input");
       nameInput.type = "text";
@@ -452,18 +586,17 @@
 
       const amountInput = document.createElement("input");
       amountInput.type = "number";
-      amountInput.placeholder = "Amount";
+      amountInput.placeholder = "Amount per bill";
       amountInput.step = "0.01";
       amountInput.value = amount;
       amountInput.className = "amount-input";
 
-      const dayInput = document.createElement("input");
-      dayInput.type = "number";
-      dayInput.placeholder = "Day";
-      dayInput.min = "1";
-      dayInput.max = "31";
-      dayInput.value = dayVal;
-      dayInput.className = "day-input";
+      const dateInput = document.createElement("input");
+      dateInput.type = "date";
+      dateInput.value = nextDate;
+      dateInput.className = "date-input";
+
+      const freqSelect = createFreqSelect(freq);
 
       const removeBtn = document.createElement("button");
       removeBtn.className = "btn-danger";
@@ -475,19 +608,111 @@
 
       nameInput.addEventListener("input", saveState);
       amountInput.addEventListener("input", saveState);
-      dayInput.addEventListener("input", saveState);
+      dateInput.addEventListener("input", saveState);
+      freqSelect.addEventListener("change", saveState);
 
       nameDiv.appendChild(nameInput);
       amountDiv.appendChild(amountInput);
-      dayDiv.appendChild(dayInput);
+      dateDiv.appendChild(dateInput);
+      freqDiv.appendChild(freqSelect);
       buttonDiv.appendChild(removeBtn);
 
       row.appendChild(nameDiv);
       row.appendChild(amountDiv);
-      row.appendChild(dayDiv);
+      row.appendChild(dateDiv);
+      row.appendChild(freqDiv);
       row.appendChild(buttonDiv);
 
       expensesContainer.appendChild(row);
+    }
+
+    // ---- Calculation helpers ----
+    function normalizeItems(rawList, defaultName) {
+      return rawList
+        .map(item => {
+          const amount = parseFloat(item.amount) || 0;
+          const name = (item.name || "").trim() || defaultName;
+          let freq = item.freq || "monthly";
+          let dateObj = null;
+          const dateStr = item.nextDate || "";
+
+          if (dateStr) {
+            // Interpret date input as local date
+            const d = new Date(dateStr + "T00:00:00");
+            if (!isNaN(d.getTime())) {
+              dateObj = d;
+            }
+          }
+
+          if (!dateObj) {
+            // If no valid date, treat as prorated
+            freq = "prorated";
+          }
+
+          return {
+            name,
+            amount,
+            freq,
+            date: dateObj,
+            nextDateStr: dateStr
+          };
+        })
+        .filter(i => i.amount > 0);
+    }
+
+    function calculateForItems(items) {
+      let totalMonth = 0;
+      let totalSoFar = 0;
+      const breakdown = [];
+
+      items.forEach(item => {
+        const { name, amount, freq, date, nextDateStr } = item;
+        let monthTotal = 0;
+        let paidSoFar = 0;
+
+        if (amount <= 0) {
+          breakdown.push({ name, nextDateStr, freq, monthTotal, paidSoFar });
+          return;
+        }
+
+        if (freq === "prorated") {
+          monthTotal = amount;
+          paidSoFar = amount * fractionOfMonth;
+        } else if (freq === "once") {
+          if (date &&
+              date.getFullYear() === year &&
+              date.getMonth() === monthIndex) {
+            monthTotal = amount;
+            paidSoFar = date <= today ? amount : 0;
+          }
+        } else if (freq === "weekly" || freq === "biweekly") {
+          const stepDays = (freq === "weekly") ? 7 : 14;
+          const occ = getOccurrencesStepDays(date, stepDays);
+          const countInMonth = occ.length;
+          const countPaid = occ.filter(d => d <= today).length;
+          monthTotal = amount * countInMonth;
+          paidSoFar = amount * countPaid;
+        } else if (freq === "monthly") {
+          const occ = getMonthlyOccurrences(date);
+          const countInMonth = occ.length;
+          const countPaid = occ.filter(d => d <= today).length;
+          monthTotal = amount * countInMonth;
+          paidSoFar = amount * countPaid;
+        }
+
+        totalMonth += monthTotal;
+        totalSoFar += paidSoFar;
+
+        breakdown.push({
+          name,
+          nextDateStr,
+          freq,
+          monthTotal,
+          paidSoFar
+        });
+      });
+
+      return { totalMonth, totalSoFar, breakdown };
     }
 
     // ---- Event handlers ----
@@ -504,45 +729,26 @@
     calcBtn.addEventListener("click", () => {
       saveState();
 
-      // Build numeric incomes
       const incomesRaw = getCurrentIncomes();
-      const incomes = incomesRaw
-        .map(i => {
-          const amount = parseFloat(i.amount) || 0;
-          const d = cleanDay(i.day);
-          const name = i.name.trim() || "Income";
-          return { name, amount, day: d };
-        })
-        .filter(i => i.amount > 0);
-
-      // Build numeric expenses
       const expensesRaw = getCurrentExpenses();
-      const expenses = expensesRaw
-        .map(e => {
-          const amount = parseFloat(e.amount) || 0;
-          const d = cleanDay(e.day);
-          const name = e.name.trim() || "Expense";
-          return { name, amount, day: d };
-        })
-        .filter(e => e.amount > 0);
 
-      const totalIncome = incomes.reduce((sum, i) => sum + i.amount, 0);
-      const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+      const incomes = normalizeItems(incomesRaw, "Income");
+      const expenses = normalizeItems(expensesRaw, "Expense");
+
+      const incomeCalc = calculateForItems(incomes);
+      const expenseCalc = calculateForItems(expenses);
+
+      const totalIncome = incomeCalc.totalMonth;
+      const totalExpenses = expenseCalc.totalMonth;
       const netMonth = totalIncome - totalExpenses;
 
-      const incomeSoFar = incomes.reduce(
-        (sum, i) => sum + amountPaidForItem(i.amount, i.day),
-        0
-      );
-      const expensesSoFar = expenses.reduce(
-        (sum, e) => sum + amountPaidForItem(e.amount, e.day),
-        0
-      );
+      const incomeSoFar = incomeCalc.totalSoFar;
+      const expensesSoFar = expenseCalc.totalSoFar;
       const netToday = incomeSoFar - expensesSoFar;
 
       summarySection.style.display = "block";
       progressTextEl.textContent =
-        "Items with a day ≤ today are treated as fully paid; items with a blank day are spread evenly across the month.";
+        "Recurring items are calculated based on how many occurrences fall in this month and how many of those have passed as of today. Blank dates are treated as evenly spread across the month.";
 
       totalIncomeEl.textContent = formatMoney(totalIncome);
       totalExpensesEl.textContent = formatMoney(totalExpenses);
@@ -554,24 +760,29 @@
 
       // Income breakdown table
       incomeTableBody.innerHTML = "";
-      incomes.forEach(i => {
+      incomeCalc.breakdown.forEach(i => {
         const tr = document.createElement("tr");
         const tdName = document.createElement("td");
-        const tdDay = document.createElement("td");
+        const tdDate = document.createElement("td");
+        const tdFreq = document.createElement("td");
         const tdMonth = document.createElement("td");
         const tdSoFar = document.createElement("td");
 
         tdName.textContent = i.name;
-        tdDay.className = "center";
+        tdDate.className = "center";
+        tdFreq.className = "center";
         tdMonth.className = "right";
         tdSoFar.className = "right";
 
-        tdDay.textContent = i.day === null ? "–" : i.day;
-        tdMonth.textContent = formatMoney(i.amount);
-        tdSoFar.textContent = formatMoney(amountPaidForItem(i.amount, i.day));
+        const d = i.nextDateStr ? new Date(i.nextDateStr + "T00:00:00") : null;
+        tdDate.textContent = formatDateDisplay(d);
+        tdFreq.textContent = FREQ_LABELS[i.freq] || i.freq;
+        tdMonth.textContent = formatMoney(i.monthTotal);
+        tdSoFar.textContent = formatMoney(i.paidSoFar);
 
         tr.appendChild(tdName);
-        tr.appendChild(tdDay);
+        tr.appendChild(tdDate);
+        tr.appendChild(tdFreq);
         tr.appendChild(tdMonth);
         tr.appendChild(tdSoFar);
         incomeTableBody.appendChild(tr);
@@ -580,24 +791,29 @@
 
       // Expense breakdown table
       expenseTableBody.innerHTML = "";
-      expenses.forEach(e => {
+      expenseCalc.breakdown.forEach(e => {
         const tr = document.createElement("tr");
         const tdName = document.createElement("td");
-        const tdDay = document.createElement("td");
+        const tdDate = document.createElement("td");
+        const tdFreq = document.createElement("td");
         const tdMonth = document.createElement("td");
         const tdSoFar = document.createElement("td");
 
         tdName.textContent = e.name;
-        tdDay.className = "center";
+        tdDate.className = "center";
+        tdFreq.className = "center";
         tdMonth.className = "right";
         tdSoFar.className = "right";
 
-        tdDay.textContent = e.day === null ? "–" : e.day;
-        tdMonth.textContent = formatMoney(e.amount);
-        tdSoFar.textContent = formatMoney(amountPaidForItem(e.amount, e.day));
+        const d = e.nextDateStr ? new Date(e.nextDateStr + "T00:00:00") : null;
+        tdDate.textContent = formatDateDisplay(d);
+        tdFreq.textContent = FREQ_LABELS[e.freq] || e.freq;
+        tdMonth.textContent = formatMoney(e.monthTotal);
+        tdSoFar.textContent = formatMoney(e.paidSoFar);
 
         tr.appendChild(tdName);
-        tr.appendChild(tdDay);
+        tr.appendChild(tdDate);
+        tr.appendChild(tdFreq);
         tr.appendChild(tdMonth);
         tr.appendChild(tdSoFar);
         expenseTableBody.appendChild(tr);
