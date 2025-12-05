@@ -42,6 +42,7 @@
     input[type="number"],
     input[type="text"],
     input[type="date"],
+    input[type="month"],
     select {
       width: 100%;
       padding: 0.35rem 0.45rem;
@@ -156,6 +157,14 @@
 <body>
   <div class="app">
     <h1>Monthly Budget</h1>
+
+    <!-- Month selector -->
+    <div class="row" style="margin-bottom:0.25rem;">
+      <div style="max-width:220px;">
+        <label for="monthSelector">Month to view</label>
+        <input type="month" id="monthSelector" />
+      </div>
+    </div>
     <p class="muted" id="monthInfo"></p>
 
     <!-- Starting balance -->
@@ -222,7 +231,7 @@
     <section class="summary" id="summarySection" style="display:none;">
       <div id="progressText"></div>
       <div style="margin-top:0.5rem;">
-        <strong>Totals for this month</strong>
+        <strong>Totals for selected month</strong>
         <div>Starting balance: <span id="startingBalanceDisplay"></span></div>
         <div>Income (this month): <span id="totalIncome"></span></div>
         <div>Expenses (this month): <span id="totalExpenses"></span></div>
@@ -230,7 +239,7 @@
       </div>
       <hr style="margin:0.75rem 0;border:none;border-top:1px solid #e5e7eb;">
       <div>
-        <strong>As of today</strong>
+        <strong>As of today (relative to this month)</strong>
         <div>Income received so far: <span id="incomeSoFar"></span></div>
         <div>Expenses due so far: <span id="expensesSoFar"></span></div>
         <div>Net (income − expenses) as of today: <span id="netToday"></span></div>
@@ -241,15 +250,15 @@
 
     <!-- Income breakdown -->
     <section id="incomeTableSection" style="margin-top:1rem; display:none;">
-      <h3>Income breakdown<span class="tag">by date & frequency</span></h3>
+      <h3>Income breakdown<span class="tag">each occurrence</span></h3>
       <table>
         <thead>
           <tr>
             <th>Income</th>
-            <th class="center">Next date</th>
+            <th class="center">Date</th>
             <th class="center">Frequency</th>
-            <th class="right">This month</th>
-            <th class="right">Paid so far</th>
+            <th class="right">Amount</th>
+            <th class="right">Counted as paid</th>
           </tr>
         </thead>
         <tbody id="incomeTableBody"></tbody>
@@ -260,8 +269,9 @@
     <section id="expenseTableSection" style="margin-top:1rem; display:none;">
       <h3>Expense breakdown<span class="tag">paid vs remaining</span></h3>
       <p class="muted">
-        Paid = all occurrences up to today. Remaining = the rest of this month,
-        including prorated items.
+        Each row is one occurrence in the selected month. Paid = on or before
+        the effective 'today' for that month (real today for current month,
+        end-of-month for past months, none for future months).
       </p>
       <p>
         <strong>Yet to be paid this month:</strong>
@@ -273,10 +283,10 @@
         <thead>
           <tr>
             <th>Expense</th>
-            <th class="center">Next date</th>
+            <th class="center">Date</th>
             <th class="center">Frequency</th>
-            <th class="right">This month</th>
-            <th class="right">Paid so far</th>
+            <th class="right">Amount</th>
+            <th class="right">Paid</th>
             <th class="right">Remaining</th>
           </tr>
         </thead>
@@ -288,10 +298,10 @@
         <thead>
           <tr>
             <th>Expense</th>
-            <th class="center">Next date</th>
+            <th class="center">Date</th>
             <th class="center">Frequency</th>
-            <th class="right">This month</th>
-            <th class="right">Paid so far</th>
+            <th class="right">Amount</th>
+            <th class="right">Paid</th>
             <th class="right">Remaining</th>
           </tr>
         </thead>
@@ -309,28 +319,26 @@
       });
     }
 
-    // ---- Date & month info ----
+    // ---- Today / current month ----
     const today = new Date();
-    const year = today.getFullYear();
-    const monthIndex = today.getMonth(); // 0-based
-    const day = today.getDate();
-    const firstDayOfMonth = new Date(year, monthIndex, 1);
-    const lastDayOfMonth = new Date(year, monthIndex + 1, 0);
-    const daysInMonth = lastDayOfMonth.getDate();
-    const fractionOfMonth = day / daysInMonth;
+    const currentYear = today.getFullYear();
+    const currentMonthIndex = today.getMonth(); // 0-based
+    const currentDay = today.getDate();
+
+    // Selected month (can change via input)
+    let selectedYear = currentYear;
+    let selectedMonthIndex = currentMonthIndex;
 
     const monthNames = [
       "January","February","March","April","May","June",
       "July","August","September","October","November","December"
     ];
-    const monthInfoEl = document.getElementById("monthInfo");
-    monthInfoEl.textContent =
-      `${monthNames[monthIndex]} ${year} — Day ${day} of ${daysInMonth} ` +
-      `(${(fractionOfMonth * 100).toFixed(1)}% through the month)`;
 
     // ---- Elements ----
-    const startingBalanceInput = document.getElementById("startingBalanceInput");
+    const monthInfoEl = document.getElementById("monthInfo");
+    const monthSelector = document.getElementById("monthSelector");
 
+    const startingBalanceInput = document.getElementById("startingBalanceInput");
     const incomeContainer = document.getElementById("incomeContainer");
     const expensesContainer = document.getElementById("expensesContainer");
     const addIncomeBtn = document.getElementById("addIncomeBtn");
@@ -371,6 +379,57 @@
       prorated: "Prorated"
     };
 
+    // ---- Month helpers ----
+    function getMonthContext(year, monthIndex) {
+      const first = new Date(year, monthIndex, 1);
+      const last = new Date(year, monthIndex + 1, 0);
+      return { firstDay: first, lastDay: last, daysInMonth: last.getDate() };
+    }
+
+    function compareYearMonth(y1, m1, y2, m2) {
+      if (y1 !== y2) return y1 - y2;
+      return m1 - m2;
+    }
+
+    function getFractionOfMonthForProration(year, monthIndex, daysInMonth) {
+      const cmp = compareYearMonth(year, monthIndex, currentYear, currentMonthIndex);
+      if (cmp < 0) return 1; // past month: fully "done"
+      if (cmp > 0) return 0; // future month: none done
+      return currentDay / daysInMonth; // current month
+    }
+
+    function getCutoffDate(year, monthIndex, daysInMonth) {
+      const cmp = compareYearMonth(year, monthIndex, currentYear, currentMonthIndex);
+      if (cmp < 0) {
+        // past month: treat everything in that month as "paid" already
+        return new Date(year, monthIndex, daysInMonth);
+      }
+      if (cmp > 0) {
+        // future month: treat nothing in that month as paid yet
+        const d = new Date(year, monthIndex, 1);
+        d.setDate(0); // last day of previous month
+        return d;
+      }
+      // current month
+      return today;
+    }
+
+    function updateMonthInfo() {
+      const { daysInMonth } = getMonthContext(selectedYear, selectedMonthIndex);
+      let text = `${monthNames[selectedMonthIndex]} ${selectedYear}`;
+      const cmp = compareYearMonth(selectedYear, selectedMonthIndex, currentYear, currentMonthIndex);
+
+      if (cmp === 0) {
+        const frac = currentDay / daysInMonth;
+        text += ` — Day ${currentDay} of ${daysInMonth} (${(frac * 100).toFixed(1)}% through this month)`;
+      } else if (cmp < 0) {
+        text += ` — Past month (${daysInMonth} days)`;
+      } else {
+        text += ` — Future month (${daysInMonth} days)`;
+      }
+      monthInfoEl.textContent = text;
+    }
+
     function formatMoney(value) {
       if (isNaN(value)) value = 0;
       return "$" + value.toFixed(2);
@@ -399,27 +458,29 @@
       return d;
     }
 
-    function getOccurrencesStepDays(baseDate, stepDays) {
+    function getOccurrencesStepDays(baseDate, stepDays, year, monthIndex) {
       const occ = [];
       if (!baseDate || isNaN(baseDate)) return occ;
 
+      const { firstDay, lastDay } = getMonthContext(year, monthIndex);
+
       let d = new Date(baseDate);
-      const minDate = new Date(firstDayOfMonth);
+      const minDate = new Date(firstDay);
       minDate.setDate(minDate.getDate() - stepDays * 3);
 
       while (d >= minDate) {
-        if (d >= firstDayOfMonth && d <= lastDayOfMonth) {
+        if (d >= firstDay && d <= lastDay) {
           occ.push(new Date(d));
         }
         d = addDays(d, -stepDays);
       }
 
       d = addDays(baseDate, stepDays);
-      const maxDate = new Date(lastDayOfMonth);
+      const maxDate = new Date(lastDay);
       maxDate.setDate(maxDate.getDate() + stepDays * 3);
 
       while (d <= maxDate) {
-        if (d >= firstDayOfMonth && d <= lastDayOfMonth) {
+        if (d >= firstDay && d <= lastDay) {
           occ.push(new Date(d));
         }
         d = addDays(d, stepDays);
@@ -429,20 +490,22 @@
       return occ;
     }
 
-    function getMonthlyOccurrences(baseDate) {
+    function getMonthlyOccurrences(baseDate, year, monthIndex) {
       const occ = [];
       if (!baseDate || isNaN(baseDate)) return occ;
 
+      const { firstDay, lastDay } = getMonthContext(year, monthIndex);
+
       let d = new Date(baseDate);
-      while (d >= firstDayOfMonth) {
-        if (d <= lastDayOfMonth) {
+      while (d >= firstDay) {
+        if (d <= lastDay) {
           occ.push(new Date(d));
         }
         d = addMonths(d, -1);
       }
       d = addMonths(baseDate, 1);
-      while (d <= lastDayOfMonth) {
-        if (d >= firstDayOfMonth) {
+      while (d <= lastDay) {
+        if (d >= firstDay) {
           occ.push(new Date(d));
         }
         d = addMonths(d, 1);
@@ -494,8 +557,8 @@
     function buildStateObject() {
       return {
         version: 1,
-        year,
-        monthIndex,
+        year: currentYear,
+        monthIndex: currentMonthIndex,
         startingBalance: startingBalanceInput.value || "",
         incomes: getCurrentIncomes(),
         expenses: getCurrentExpenses()
@@ -749,58 +812,96 @@
         .filter(i => i.amount > 0);
     }
 
-    function calculateForItems(items) {
+    // calculateForItems now uses selected month context
+    function calculateForItems(items, opts) {
+      const {
+        year,
+        monthIndex,
+        daysInMonth,
+        cutoffDate,
+        fractionOfMonth
+      } = opts;
+
       let totalMonth = 0;
       let totalSoFar = 0;
       const breakdown = [];
 
       items.forEach(item => {
         const { name, amount, freq, date, nextDateStr } = item;
-        let monthTotal = 0;
-        let paidSoFar = 0;
 
         if (amount <= 0) {
-          breakdown.push({ name, nextDateStr, freq, monthTotal, paidSoFar, remaining: 0 });
           return;
         }
 
         if (freq === "prorated") {
-          monthTotal = amount;
-          paidSoFar = amount * fractionOfMonth;
-        } else if (freq === "once") {
-          if (date &&
-              date.getFullYear() === year &&
-              date.getMonth() === monthIndex) {
-            monthTotal = amount;
-            paidSoFar = date <= today ? amount : 0;
-          }
-        } else if (freq === "weekly" || freq === "biweekly") {
-          const stepDays = (freq === "weekly") ? 7 : 14;
-          const occ = getOccurrencesStepDays(date, stepDays);
-          const countInMonth = occ.length;
-          const countPaid = occ.filter(d => d <= today).length;
-          monthTotal = amount * countInMonth;
-          paidSoFar = amount * countPaid;
-        } else if (freq === "monthly") {
-          const occ = getMonthlyOccurrences(date);
-          const countInMonth = occ.length;
-          const countPaid = occ.filter(d => d <= today).length;
-          monthTotal = amount * countInMonth;
-          paidSoFar = amount * countPaid;
+          const monthTotal = amount;
+          const paid = amount * fractionOfMonth;
+          const remaining = monthTotal - paid;
+
+          totalMonth += monthTotal;
+          totalSoFar += paid;
+
+          breakdown.push({
+            name,
+            freq,
+            date: null,
+            nextDateStr,
+            thisAmount: monthTotal,
+            paidAmount: paid,
+            remainingAmount: remaining
+          });
+          return;
         }
 
-        const remaining = monthTotal - paidSoFar;
+        if (freq === "once") {
+          if (
+            date &&
+            date.getFullYear() === year &&
+            date.getMonth() === monthIndex
+          ) {
+            const paid = date <= cutoffDate ? amount : 0;
+            const remaining = amount - paid;
 
-        totalMonth += monthTotal;
-        totalSoFar += paidSoFar;
+            totalMonth += amount;
+            totalSoFar += paid;
 
-        breakdown.push({
-          name,
-          nextDateStr,
-          freq,
-          monthTotal,
-          paidSoFar,
-          remaining
+            breakdown.push({
+              name,
+              freq,
+              date,
+              nextDateStr,
+              thisAmount: amount,
+              paidAmount: paid,
+              remainingAmount: remaining
+            });
+          }
+          return;
+        }
+
+        let occ = [];
+        if (freq === "weekly" || freq === "biweekly") {
+          const stepDays = freq === "weekly" ? 7 : 14;
+          occ = getOccurrencesStepDays(date, stepDays, year, monthIndex);
+        } else if (freq === "monthly") {
+          occ = getMonthlyOccurrences(date, year, monthIndex);
+        }
+
+        occ.forEach(occDate => {
+          const paid = occDate <= cutoffDate ? amount : 0;
+          const remaining = amount - paid;
+
+          totalMonth += amount;
+          totalSoFar += paid;
+
+          breakdown.push({
+            name,
+            freq,
+            date: occDate,
+            nextDateStr,
+            thisAmount: amount,
+            paidAmount: paid,
+            remainingAmount: remaining
+          });
         });
       });
 
@@ -809,17 +910,16 @@
 
     // ---- Export / Import ----
     exportBtn.addEventListener("click", () => {
-      // Ensure we have the latest edits
       saveState();
       const data = buildStateObject();
       const json = JSON.stringify(data, null, 2);
       const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      const mm = String(monthIndex + 1).padStart(2, "0");
-      const dd = String(day).padStart(2, "0");
+      const mm = String(currentMonthIndex + 1).padStart(2, "0");
+      const dd = String(currentDay).padStart(2, "0");
       a.href = url;
-      a.download = `budget-data-${year}-${mm}-${dd}.json`;
+      a.download = `budget-data-${currentYear}-${mm}-${dd}.json`;
       document.body.appendChild(a);
       a.click();
       setTimeout(() => {
@@ -853,20 +953,33 @@
       importFileInput.value = "";
     });
 
-    // ---- Event handlers ----
-    addIncomeBtn.addEventListener("click", () => {
-      addIncomeRow();
-      saveState();
-    });
+    // ---- Main recalculation ----
+    function recalc() {
+      // Update selected month from input
+      const mv = monthSelector.value; // "YYYY-MM"
+      if (mv && mv.length >= 7) {
+        const parts = mv.split("-");
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        if (!isNaN(y) && !isNaN(m)) {
+          selectedYear = y;
+          selectedMonthIndex = m;
+        }
+      }
 
-    addExpenseBtn.addEventListener("click", () => {
-      addExpenseRow();
-      saveState();
-    });
+      const { daysInMonth } = getMonthContext(selectedYear, selectedMonthIndex);
+      const fractionOfMonth = getFractionOfMonthForProration(
+        selectedYear,
+        selectedMonthIndex,
+        daysInMonth
+      );
+      const cutoffDate = getCutoffDate(
+        selectedYear,
+        selectedMonthIndex,
+        daysInMonth
+      );
 
-    startingBalanceInput.addEventListener("input", saveState);
-
-    calcBtn.addEventListener("click", () => {
+      updateMonthInfo();
       saveState();
 
       const startingBalance = parseFloat(startingBalanceInput.value) || 0;
@@ -877,8 +990,16 @@
       const incomes = normalizeItems(incomesRaw, "Income");
       const expenses = normalizeItems(expensesRaw, "Expense");
 
-      const incomeCalc = calculateForItems(incomes);
-      const expenseCalc = calculateForItems(expenses);
+      const options = {
+        year: selectedYear,
+        monthIndex: selectedMonthIndex,
+        daysInMonth,
+        cutoffDate,
+        fractionOfMonth
+      };
+
+      const incomeCalc = calculateForItems(incomes, options);
+      const expenseCalc = calculateForItems(expenses, options);
 
       const totalIncome = incomeCalc.totalMonth;
       const totalExpenses = expenseCalc.totalMonth;
@@ -892,13 +1013,15 @@
       const finalBalance = startingBalance + netMonth;
 
       const totalRemainingExpenses = expenseCalc.breakdown.reduce(
-        (sum, e) => sum + e.remaining,
+        (sum, row) => sum + row.remainingAmount,
         0
       );
 
       summarySection.style.display = "block";
       progressTextEl.textContent =
-        "Recurring items are calculated based on how many occurrences fall in this month and how many of those have passed as of today. Blank dates are treated as evenly spread across the month.";
+        "Month selector controls which month's occurrences are shown. " +
+        "Paid vs remaining is determined by today's date: past months behave as fully completed, " +
+        "future months as not yet started.";
 
       startingBalanceDisplay.textContent = formatMoney(startingBalance);
       totalIncomeEl.textContent = formatMoney(totalIncome);
@@ -915,72 +1038,75 @@
         Math.max(totalRemainingExpenses, 0)
       );
 
-      // Income breakdown table
+      // Income breakdown: one row per occurrence
       incomeTableBody.innerHTML = "";
-      incomeCalc.breakdown.forEach(i => {
+      incomeCalc.breakdown.forEach(row => {
         const tr = document.createElement("tr");
         const tdName = document.createElement("td");
         const tdDate = document.createElement("td");
         const tdFreq = document.createElement("td");
-        const tdMonth = document.createElement("td");
-        const tdSoFar = document.createElement("td");
+        const tdAmt = document.createElement("td");
+        const tdPaid = document.createElement("td");
 
-        tdName.textContent = i.name;
+        tdName.textContent = row.name;
         tdDate.className = "center";
         tdFreq.className = "center";
-        tdMonth.className = "right";
-        tdSoFar.className = "right";
+        tdAmt.className = "right";
+        tdPaid.className = "right";
 
-        const d = i.nextDateStr ? new Date(i.nextDateStr + "T00:00:00") : null;
-        tdDate.textContent = formatDateDisplay(d);
-        tdFreq.textContent = FREQ_LABELS[i.freq] || i.freq;
-        tdMonth.textContent = formatMoney(i.monthTotal);
-        tdSoFar.textContent = formatMoney(i.paidSoFar);
+        tdDate.textContent = row.freq === "prorated"
+          ? "–"
+          : formatDateDisplay(row.date);
+        tdFreq.textContent = FREQ_LABELS[row.freq] || row.freq;
+        tdAmt.textContent = formatMoney(row.thisAmount);
+        tdPaid.textContent = formatMoney(row.paidAmount);
 
         tr.appendChild(tdName);
         tr.appendChild(tdDate);
         tr.appendChild(tdFreq);
-        tr.appendChild(tdMonth);
-        tr.appendChild(tdSoFar);
+        tr.appendChild(tdAmt);
+        tr.appendChild(tdPaid);
         incomeTableBody.appendChild(tr);
       });
       incomeTableSection.style.display = incomes.length ? "block" : "none";
 
-      // Expense breakdown tables: split into paid vs remaining
+      // Expense breakdown: split each occurrence into paid vs remaining
       expensePaidBody.innerHTML = "";
       expenseRemainingBody.innerHTML = "";
 
-      expenseCalc.breakdown.forEach(e => {
+      expenseCalc.breakdown.forEach(row => {
         const tr = document.createElement("tr");
         const tdName = document.createElement("td");
         const tdDate = document.createElement("td");
         const tdFreq = document.createElement("td");
-        const tdMonth = document.createElement("td");
-        const tdSoFar = document.createElement("td");
+        const tdAmt = document.createElement("td");
+        const tdPaid = document.createElement("td");
         const tdRem = document.createElement("td");
 
-        tdName.textContent = e.name;
+        tdName.textContent = row.name;
         tdDate.className = "center";
         tdFreq.className = "center";
-        tdMonth.className = "right";
-        tdSoFar.className = "right";
+        tdAmt.className = "right";
+        tdPaid.className = "right";
         tdRem.className = "right";
 
-        const d = e.nextDateStr ? new Date(e.nextDateStr + "T00:00:00") : null;
-        tdDate.textContent = formatDateDisplay(d);
-        tdFreq.textContent = FREQ_LABELS[e.freq] || e.freq;
-        tdMonth.textContent = formatMoney(e.monthTotal);
-        tdSoFar.textContent = formatMoney(e.paidSoFar);
-        tdRem.textContent = formatMoney(Math.max(e.remaining, 0));
+        tdDate.textContent = row.freq === "prorated"
+          ? "–"
+          : formatDateDisplay(row.date);
+        tdFreq.textContent = FREQ_LABELS[row.freq] || row.freq;
+        tdAmt.textContent = formatMoney(row.thisAmount);
+        tdPaid.textContent = formatMoney(row.paidAmount);
+        tdRem.textContent = formatMoney(Math.max(row.remainingAmount, 0));
 
         tr.appendChild(tdName);
         tr.appendChild(tdDate);
         tr.appendChild(tdFreq);
-        tr.appendChild(tdMonth);
-        tr.appendChild(tdSoFar);
+        tr.appendChild(tdAmt);
+        tr.appendChild(tdPaid);
         tr.appendChild(tdRem);
 
-        if (e.remaining <= 0.01) {
+        const epsilon = 0.01;
+        if (row.remainingAmount <= epsilon) {
           expensePaidBody.appendChild(tr);
         } else {
           expenseRemainingBody.appendChild(tr);
@@ -989,7 +1115,22 @@
 
       const hasExpenses = expenses.length > 0;
       expenseTableSection.style.display = hasExpenses ? "block" : "none";
+    }
+
+    // ---- Event handlers ----
+    addIncomeBtn.addEventListener("click", () => {
+      addIncomeRow();
+      saveState();
     });
+
+    addExpenseBtn.addEventListener("click", () => {
+      addExpenseRow();
+      saveState();
+    });
+
+    startingBalanceInput.addEventListener("input", saveState);
+
+    calcBtn.addEventListener("click", recalc);
 
     resetBtn.addEventListener("click", () => {
       try {
@@ -1003,7 +1144,16 @@
       loadState();
     });
 
+    monthSelector.addEventListener("change", () => {
+      // Recalc immediately when month changes
+      recalc();
+    });
+
     // ---- Initialize ----
+    // Set month selector default to current month
+    monthSelector.value =
+      `${currentYear}-${String(currentMonthIndex + 1).padStart(2, "0")}`;
+    updateMonthInfo();
     loadState();
   </script>
 </body>
